@@ -1,69 +1,54 @@
 <template>
   <div class="remoteChrome">
-    <Row style="padding:20px">
-      <Col :xs="{ span: 22, offset: 1 }" :lg="{ span: 11 }">
-      <Card shadow>
-        <p slot="title">检查chrome-remote-debugging port</p>
-        <Row>
-          <Col span="11">
-          <Input v-model="address.host">
-          <span slot="prepend">host:</span>
-          </Input>
-          </Col>
-          <Col span="11" offset='1'>
-          <Input v-model="address.port">
-          <span slot="prepend">port:</span>
-          </Input>
-          </Col>
-        </Row>
-        <!-- <br>
-        <Row>
-          <Button type="primary" @click="whoami">[spwan] whoami</Button>
-          <Button type="primary" @click="loadENV">[spwan] ENV</Button>
-        </Row>
+
+    <Card shadow>
+      <p slot="title">检查chrome-remote-debugging port</p>
+      <Row>
+        <Col span="11">
+        <Input v-model="address.host">
+        <span slot="prepend">host:</span>
+        </Input>
+        </Col>
+        <Col span="11" offset='1'>
+        <Input v-model="address.port">
+        <span slot="prepend">port:</span>
+        </Input>
+        </Col>
+      </Row>
+      <br>
+      <Row>
+        <Button type="primary" @click="CDPList">[CDP] 显示标签列表</Button>
+        <Button type="primary" @click="CDPActivateTarget">[CDP] 激活目标标签</Button>
         <br>
-        <Row>
-          <Button type="primary" @click="CRIList">[spwan]chrome-remote-interface list</Button>
-        </Row>
+        <Button type="primary" @click='grubClient'>建立连接</Button>
+        <span>{{ selectedClient ? "已连接" : "未连接" }}</span>
         <br>
-        <Row>
-          <Button type="primary" @click="getTabJson">[axios] [target]:[port]/json</Button>
-        </Row>-->
-        <br>
-        <Row>
-          <Button type="primary" @click="CDPList">[CDP] 显示标签列表</Button>
-          <Button type="primary" @click="CDPActivateTarget">[CDP] 激活目标标签</Button>
-        </Row>
-        <br>
-        <Row>
-          <Collapse v-model="value1" :bordered="false">
-            <Panel name="1">
-              RESULT
-              <pre slot="content">{{msgPool['card1']}}</pre>
-            </Panel>
-          </Collapse>
-        </Row>
-        <Row>
-          <Card v-for="(chrometab,idx) in inspectTabs" :key='chrometab.id' style='margin:1em 0' :class="{red:selectedTabIds.indexOf(chrometab.id) !== -1}" shadow>
-            <p slot="title">{{ chrometab.title }}</p>
-            <img v-if="!!chrometab.faviconUrl" :src="chrometab.faviconUrl | fixURL " alt="">
-            <p>{{ chrometab.devtoolsFrontendUrl}}</p>
-            <p>{{ chrometab.url | fixURL}}</p>
-          </Card>
-        </Row>
-      </Card>
-      </Col>
-      <Col :xs='{span:22,offset:1}' :lg='{span:11,offset:2}'>
-      <Card shadow>
-        <p slot="title">连接 chrome-remote-interface</p>
-        <p>
-          <Button @click="fCDP()">CDP()</Button>
-        </p>
-        <p>卡片内容</p>
-        <p>卡片内容</p>
-      </Card>
-      </Col>
-    </Row>
+        <Button type="primary" @click="execJS">执行JS</Button>
+        <Button type="primary" @click="CDPgetTarget">[async] getTarget</Button>
+        <Button type="primary" @click="grubClient">[async] grubClient</Button>
+        <Button type="primary" @click="releaseClient">[] releaseClient</Button>
+      </Row>
+      <br>
+      <Row>
+        <Collapse v-model="value1" :bordered="false">
+          <Panel name="1">
+            RESULT
+            <pre slot="content">{{msgPool['card1']}}</pre>
+          </Panel>
+        </Collapse>
+      </Row>
+      <Row>
+        <Card v-for="(chrometab,idx) in inspectTabs" :key='chrometab.id' class='chrometab' :class="{red:selectedTabIds.indexOf(chrometab.id) !== -1}" shadow>
+          <p slot="title"><img v-if="!!chrometab.faviconUrl" :src="chrometab.faviconUrl | fixURL " alt="">{{ chrometab.title }}</p>
+          <p class="Oneline">
+            <span>{{ chrometab.devtoolsFrontendUrl}}</span>
+          </p>
+          <p class="Oneline">
+            <span>{{ chrometab.url | fixURL}}</span>
+          </p>
+        </Card>
+      </Row>
+    </Card>
   </div>
 </template>
 
@@ -83,6 +68,7 @@ export default {
       value1: [1, 2, 3],
       inspectTabs: [],
       selectedTabIds: [],
+      selectedClient: null,
       address: {
         host: 'lhyh.songlairui.cn',
         port: '9221'
@@ -119,22 +105,62 @@ export default {
     },
     CDPList(cb) {
       let options = Object.assign({}, this.address)
-      CDP.List(options, (err, targets) => {
-        console.info('targets\n', targets)
+      CDP.listTabs(options, (err, targets) => {
+        // console.info('targets\n', targets)
         this.inspectTabs.splice(0, this.inspectTabs.length, ...targets)
         this.selectedTabIds = ([].concat(selectedTabs(targets))).map(_ => _.id)
       })
     },
+    async CDPgetTarget() {
+      let options = Object.assign({}, this.address)
+      let target_id = await new Promise(resolve => {
+        CDP.listTabs(options, (err, targets) => {
+          resolve(
+            ([].concat(selectedTabs(targets))).map(_ => _.id)[0]
+          )
+        })
+      }).catch(error => console.error(error))
+      target_id = target_id || "34567890"
+
+      let client
+      // try {
+      client = await CDP(Object.assign({}, options, { target: target_id }))
+      // } catch (error) {
+      //   console.info('Error', error)
+      //   return
+      // }
+      this.selectedClient = client
+      // console.info('获得了client', client)
+      client.on('event', (...msg) => {
+        console.info(msg)
+      })
+      client.on('disconnect', function () {
+        console.info('断开连接了')
+        this.selectedClient = null
+      })
+      // client.Runtime.evaluate({ expression: `alert(111)` })
+      // setTimeout(() => {
+      //   client && client.close(() => {
+      //     console.info('关闭了连接', client)
+      //   })
+      // }, 2000)
+
+      return client
+    },
     CDPActivateTarget() {
       let options = Object.assign({}, this.address)
-      CDP.List(options, (err, targets) => {
+      CDP.listTabs(options, (err, targets) => {
         // console.info('targets\n', targets)
         // this.inspectTabs.splice(0, this.inspectTabs.length, ...targets)
         this.selectedTabIds = ([].concat(selectedTabs(targets))).map(_ => _.id)
         this.selectedTabIds.forEach(id => {
           CDP.Activate(Object.assign({}, options, { id }))
         })
+        // return this.selectedTabIds
       })
+      // .then(ids => {
+      //   console.info('CDPActivateTarget complete', ids)
+      // })
     },
     CRIList() {
       let process = spawn('/usr/local/bin/chrome-remote-interface', [
@@ -198,6 +224,54 @@ export default {
       CDP(options, client => {
         console.info(client)
       })
+    },
+    execJSraw() {
+      let options = Object.assign({}, this.address, { target: this.selectedTabIds[0] })
+      // let options = Object.assign({}, this.address)
+      CDP(options).then(client => {
+        // console.info(clients)
+        this.selectedClient = client
+
+      }).then(() => {
+        this.selectedClient.Runtime.evaluate({
+          expression: `document.body.appendChild(document.createTextNode('asdasd'))`
+        })
+      }).then(() => {
+        this.selectedClient.close()
+      }).catch(e => {
+        console.error('E', e)
+      })
+    },
+    grubClient() {
+      let options = Object.assign({}, this.address)
+      CDP.listTabs(options, (err, targets) => {
+        let target = ([].concat(selectedTabs(targets))).map(_ => _.id)[0]
+        if (!target) return
+        CDP(Object.assign({}, options, { target })).then(client => {
+          client.on('event', (...msg) => {
+            console.info(msg)
+          })
+          client.on('disconnect', function () {
+            console.info('断开连接了')
+            // this.selectedClient = null
+          })
+          this.selectedClient = client
+        })
+      })
+
+    },
+    releaseClient() {
+      // this.selectedClient && this.selectedClient.close(() => {
+      //   this.selectedClient = null
+      // })
+      // this.selectedClient || (this.selectedClient = null)
+    },
+    execJS() {
+      if (this.selectedClient) {
+        this.selectedClient.Runtime.evaluate({
+          expression: `alert(12121)`
+        })
+      }
     }
   },
   filters: {
@@ -234,7 +308,7 @@ function selectedTabs(targets) {
 }
 </script>
 
-<style>
+<style scoped>
 .red {
   color: red;
   border-color: red;
@@ -242,5 +316,16 @@ function selectedTabs(targets) {
 
 button {
   margin: .2em;
+}
+
+.chrometab {
+  margin: 1em 0;
+}
+
+.chrometab .Oneline {
+  height: 1.5em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>
