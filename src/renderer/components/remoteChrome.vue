@@ -16,8 +16,8 @@
           </Input>
           </Col>
         </Row>
-        <br v-if="false">
-        <Row v-if="false">
+        <!-- <br>
+        <Row>
           <Button type="primary" @click="whoami">[spwan] whoami</Button>
           <Button type="primary" @click="loadENV">[spwan] ENV</Button>
         </Row>
@@ -27,11 +27,12 @@
         </Row>
         <br>
         <Row>
-          <Button type="primary" @click="CDPList">[axios] CDPList</Button>
-        </Row>
+          <Button type="primary" @click="getTabJson">[axios] [target]:[port]/json</Button>
+        </Row>-->
         <br>
         <Row>
-          <Button type="primary" @click="getTabJson">[axios] [target]:[port]/json</Button>
+          <Button type="primary" @click="CDPList">[CDP] 显示标签列表</Button>
+          <Button type="primary" @click="CDPActivateTarget">[CDP] 激活目标标签</Button>
         </Row>
         <br>
         <Row>
@@ -45,9 +46,9 @@
         <Row>
           <Card v-for="(chrometab,idx) in inspectTabs" :key='chrometab.id' style='margin:1em 0' :class="{red:selectedTabIds.indexOf(chrometab.id) !== -1}" shadow>
             <p slot="title">{{ chrometab.title }}</p>
-            <img v-if="!!chrometab.faviconUrl" :src="chrometab.faviconUrl" alt="">
+            <img v-if="!!chrometab.faviconUrl" :src="chrometab.faviconUrl | fixURL " alt="">
             <p>{{ chrometab.devtoolsFrontendUrl}}</p>
-            <p>{{ chrometab.url}}</p>
+            <p>{{ chrometab.url | fixURL}}</p>
           </Card>
         </Row>
       </Card>
@@ -116,12 +117,23 @@ export default {
         this.msgPool.card1 = data ? data.toString() : ''
       })
     },
-    CDPList() {
+    CDPList(cb) {
       let options = Object.assign({}, this.address)
       CDP.List(options, (err, targets) => {
         console.info('targets\n', targets)
         this.inspectTabs.splice(0, this.inspectTabs.length, ...targets)
         this.selectedTabIds = ([].concat(selectedTabs(targets))).map(_ => _.id)
+      })
+    },
+    CDPActivateTarget() {
+      let options = Object.assign({}, this.address)
+      CDP.List(options, (err, targets) => {
+        // console.info('targets\n', targets)
+        // this.inspectTabs.splice(0, this.inspectTabs.length, ...targets)
+        this.selectedTabIds = ([].concat(selectedTabs(targets))).map(_ => _.id)
+        this.selectedTabIds.forEach(id => {
+          CDP.Activate(Object.assign({}, options, { id }))
+        })
       })
     },
     CRIList() {
@@ -149,25 +161,17 @@ export default {
         this.$Message.error('接收到 error 数据' + (data))
       })
       process.stdout.on('end', data => {
-        // console.info('end data: ', data)
+
         i = 0
-        // this.$Message.info('end')
-        // alert('end')
-        // alert(dataPool[0].toString())
-        console.info(concatTypedArray(dataPool))
-        if (dataPool.length > 1) {
-          // this.$Message.error('chunk 数 大于1，需要优化')
-        } else {
-          // this.$Message.info('正常显示chunk')
-        }
+
         this.msgPool.card1 = new TextDecoder().decode(
           concatTypedArray(dataPool)
         )
         this.inspectTabs = JSON.parse(this.msgPool.card1)
 
-        // data && (dataPool.push(data))
       })
       process.on('exit', code => {
+        console.info('进程已退出' + code)
         // this.$Message.info('进程已退出', 'exited with code ', code)
       })
     },
@@ -183,7 +187,7 @@ export default {
       })
     },
     getViaHIframw() {
-
+      // 通过iframe获取跨域信息？
     },
     fCDP() {
       console.info(CDP)
@@ -194,6 +198,11 @@ export default {
       CDP(options, client => {
         console.info(client)
       })
+    }
+  },
+  filters: {
+    fixURL(value) {
+      return value.replace('localhost', 'lhyh.songlairui.cn')
     }
   },
   created() {
@@ -229,5 +238,9 @@ function selectedTabs(targets) {
 .red {
   color: red;
   border-color: red;
+}
+
+button {
+  margin: .2em;
 }
 </style>
