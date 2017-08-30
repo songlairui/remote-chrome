@@ -1,0 +1,77 @@
+
+    whoami() {
+      let process = spawn('whoami')
+      process.stdout.on('data', data => {
+        console.info(data)
+        this.$Message.info('I am ' + data)
+      })
+    },
+    source() {
+      let process = spawn('source', ['~/.zshrc'])
+      process.stdout.on('data', data => {
+        console.info(data)
+        this.$Message.info('sourced ' + data)
+      })
+    },
+    loadENV() {
+      console.info('process.env', process.env)
+      let Process = spawn('env')
+      Process.stdout.on('data', data => {
+        console.info(data)
+        this.$Message.info('I am ' + data)
+        this.msgPool.card1 = data ? data.toString() : ''
+      })
+    },
+    CRIList() {
+      let process = spawn('/usr/local/bin/chrome-remote-interface', [
+        'list',
+        '-t',
+        this.address.host || '127.0.0.1',
+        '-p',
+        this.address.port || 9222
+      ], {
+          env: {
+            PATH: '/usr/local/bin:/usr/local/sbin:/Users/larry/.yarn/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+          }
+        })
+      let dataPool = []
+      let i = 0
+      this.$Message.info('执行后台进程')
+      process.stdout.on('data', data => {
+        dataPool.push(data)
+        console.info('data collected')
+        this.$Message.info('接收到 chunk 数据' + (++i))
+      })
+      process.stderr.on('data', data => {
+        console.error(data)
+        this.$Message.error('接收到 error 数据' + (data))
+      })
+      process.stdout.on('end', data => {
+
+        i = 0
+
+        this.msgPool.card1 = new TextDecoder().decode(
+          concatTypedArray(dataPool)
+        )
+        this.inspectTabs = JSON.parse(this.msgPool.card1)
+
+      })
+      process.on('exit', code => {
+        console.info('进程已退出' + code)
+        // this.$Message.info('进程已退出', 'exited with code ', code)
+      })
+    },
+    getTabJson() {
+      this.$Message.info('axios 请求' + window.location.href)
+      console.info(window.location.href)
+      axios.get(`http://${this.address.host}:${this.address.port}/json`).then(response => {
+        console.info(response)
+        this.$Message.info('axios 请求 response ' + JSON.stringify(response))
+      }).catch(err => {
+        console.error('err', err)
+        this.$Message.info('axios 请求 error ' + JSON.stringify(err))
+      })
+    },
+    getViaHIframw() {
+      // 通过iframe获取跨域信息？
+    },

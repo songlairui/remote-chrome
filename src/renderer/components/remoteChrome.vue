@@ -21,12 +21,12 @@
         <Button type="primary" @click="CDPActivateTarget">[CDP] 激活目标标签</Button>
         <br>
         <Button type="primary" @click='grubClient'>建立连接</Button>
-        <span>{{ selectedClient ? "已连接" : "未连接" }}</span>
+        <span>{{ connected? "已连接" : "未连接" }}</span>
         <br>
         <Button type="primary" @click="execJS">执行JS</Button>
-        <Button type="primary" @click="CDPgetTarget">[async] getTarget</Button>
-        <Button type="primary" @click="grubClient">[async] grubClient</Button>
-        <Button type="primary" @click="releaseClient">[] releaseClient</Button>
+        <Button type="primary" @click="releaseClient">断开连接</Button>
+        <Button type="primary" @click="selectDOM()">选择DOM</Button>
+        <Button type="primary" @click="changeColor()">改变颜色</Button>
       </Row>
       <br>
       <Row>
@@ -60,6 +60,7 @@ const url = require('url')
 
 const { spawn } = require('child_process')
 
+
 export default {
   name: 'remote-chrome',
   data() {
@@ -68,7 +69,8 @@ export default {
       value1: [1, 2, 3],
       inspectTabs: [],
       selectedTabIds: [],
-      selectedClient: null,
+      track: null,
+      connected: null,
       address: {
         host: 'lhyh.songlairui.cn',
         port: '9221'
@@ -80,29 +82,6 @@ export default {
     }
   },
   methods: {
-    whoami() {
-      let process = spawn('whoami')
-      process.stdout.on('data', data => {
-        console.info(data)
-        this.$Message.info('I am ' + data)
-      })
-    },
-    source() {
-      let process = spawn('source', ['~/.zshrc'])
-      process.stdout.on('data', data => {
-        console.info(data)
-        this.$Message.info('sourced ' + data)
-      })
-    },
-    loadENV() {
-      console.info('process.env', process.env)
-      let Process = spawn('env')
-      Process.stdout.on('data', data => {
-        console.info(data)
-        this.$Message.info('I am ' + data)
-        this.msgPool.card1 = data ? data.toString() : ''
-      })
-    },
     CDPList(cb) {
       let options = Object.assign({}, this.address)
       CDP.listTabs(options, (err, targets) => {
@@ -111,118 +90,44 @@ export default {
         this.selectedTabIds = ([].concat(selectedTabs(targets))).map(_ => _.id)
       })
     },
-    async CDPgetTarget() {
+    async getTarget() {
+      if (this.chromeClient) return this.chromeClient
+      let client
       let options = Object.assign({}, this.address)
       let target_id = await new Promise(resolve => {
         CDP.listTabs(options, (err, targets) => {
-          resolve(
-            ([].concat(selectedTabs(targets))).map(_ => _.id)[0]
-          )
+          resolve(([].concat(selectedTabs(targets))).map(_ => _.id)[0])
         })
       }).catch(error => console.error(error))
       target_id = target_id || "34567890"
 
-      let client
-      // try {
-      client = await CDP(Object.assign({}, options, { target: target_id }))
-      // } catch (error) {
-      //   console.info('Error', error)
-      //   return
-      // }
-      this.selectedClient = client
-      // console.info('获得了client', client)
-      client.on('event', (...msg) => {
-        console.info(msg)
-      })
-      client.on('disconnect', function () {
-        console.info('断开连接了')
-        this.selectedClient = null
-      })
-      // client.Runtime.evaluate({ expression: `alert(111)` })
-      // setTimeout(() => {
-      //   client && client.close(() => {
-      //     console.info('关闭了连接', client)
-      //   })
-      // }, 2000)
+      this.releaseClient()
 
+      try {
+        client = await CDP(Object.assign({}, options, { target: target_id }))
+      } catch (error) {
+        console.info('Error', error)
+        return
+      }
+
+      client.on('disconnect', () => {
+        console.info('断开连接了')
+        this.chromeClient = null
+        this.connected = false
+      })
+
+      this.chromeClient = client
+      this.connected = true
+      // this.track = chromeClient
       return client
     },
     CDPActivateTarget() {
       let options = Object.assign({}, this.address)
       CDP.listTabs(options, (err, targets) => {
-        // console.info('targets\n', targets)
-        // this.inspectTabs.splice(0, this.inspectTabs.length, ...targets)
         this.selectedTabIds = ([].concat(selectedTabs(targets))).map(_ => _.id)
         this.selectedTabIds.forEach(id => {
           CDP.Activate(Object.assign({}, options, { id }))
         })
-        // return this.selectedTabIds
-      })
-      // .then(ids => {
-      //   console.info('CDPActivateTarget complete', ids)
-      // })
-    },
-    CRIList() {
-      let process = spawn('/usr/local/bin/chrome-remote-interface', [
-        'list',
-        '-t',
-        this.address.host || '127.0.0.1',
-        '-p',
-        this.address.port || 9222
-      ], {
-          env: {
-            PATH: '/usr/local/bin:/usr/local/sbin:/Users/larry/.yarn/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-          }
-        })
-      let dataPool = []
-      let i = 0
-      this.$Message.info('执行后台进程')
-      process.stdout.on('data', data => {
-        dataPool.push(data)
-        console.info('data collected')
-        this.$Message.info('接收到 chunk 数据' + (++i))
-      })
-      process.stderr.on('data', data => {
-        console.error(data)
-        this.$Message.error('接收到 error 数据' + (data))
-      })
-      process.stdout.on('end', data => {
-
-        i = 0
-
-        this.msgPool.card1 = new TextDecoder().decode(
-          concatTypedArray(dataPool)
-        )
-        this.inspectTabs = JSON.parse(this.msgPool.card1)
-
-      })
-      process.on('exit', code => {
-        console.info('进程已退出' + code)
-        // this.$Message.info('进程已退出', 'exited with code ', code)
-      })
-    },
-    getTabJson() {
-      this.$Message.info('axios 请求' + window.location.href)
-      console.info(window.location.href)
-      axios.get(`http://${this.address.host}:${this.address.port}/json`).then(response => {
-        console.info(response)
-        this.$Message.info('axios 请求 response ' + JSON.stringify(response))
-      }).catch(err => {
-        console.error('err', err)
-        this.$Message.info('axios 请求 error ' + JSON.stringify(err))
-      })
-    },
-    getViaHIframw() {
-      // 通过iframe获取跨域信息？
-    },
-    fCDP() {
-      console.info(CDP)
-      let options = Object.assign({}, this.address)
-      CDP.List(options, (err, targets) => {
-        console.info('targets\n', targets)
-      })
-      CDP(options, client => {
-        console.info(client)
       })
     },
     execJSraw() {
@@ -242,12 +147,18 @@ export default {
         console.error('E', e)
       })
     },
-    grubClient() {
+    async grubClient() {
+      let client = await this.getTarget()
+
+    },
+    grubClientPromise() {
       let options = Object.assign({}, this.address)
       CDP.listTabs(options, (err, targets) => {
         let target = ([].concat(selectedTabs(targets))).map(_ => _.id)[0]
         if (!target) return
         CDP(Object.assign({}, options, { target })).then(client => {
+
+          this.selectedClient = client
           client.on('event', (...msg) => {
             console.info(msg)
           })
@@ -255,21 +166,60 @@ export default {
             console.info('断开连接了')
             // this.selectedClient = null
           })
-          this.selectedClient = client
         })
       })
 
     },
-    releaseClient() {
-      // this.selectedClient && this.selectedClient.close(() => {
-      //   this.selectedClient = null
-      // })
-      // this.selectedClient || (this.selectedClient = null)
+    async releaseClient() {
+      let target = this.chromeClient
+      // console.info(target)
+      target && target.close(() => {
+        console.info('closed')
+        this.chromeClient = null
+        this.connected = false
+      })
     },
     execJS() {
-      if (this.selectedClient) {
-        this.selectedClient.Runtime.evaluate({
+      let client = this.chromeClient
+      if (client) {
+        client.Runtime.evaluate({
           expression: `alert(12121)`
+        })
+      } else {
+        this.$Message.info('no Connections')
+      }
+    },
+    async selectDOM(selector) {
+      selector = selector || 'input'
+      let client = this.chromeClient
+      if (client) {
+        let root = await client.DOM.getDocument()
+        // console.info(root.root.nodeId)
+        let result = await client.DOM.querySelectorAll({ nodeId: root.root.nodeId, selector: 'input' })
+        // console.info(result)
+        this.selectedDOMs = result
+      } else {
+        this.$Message.info('no Connections')
+        this.selectedDOMs = []
+      }
+    },
+    async changeColor() {
+      let result = this.selectedDOMs
+      let client = this.chromeClient
+      if (client && result) {
+        result.nodeIds.forEach(async nodeId => {
+          // client.DOM.setNodeValue({
+          //   nodeId,
+          //   value: 'tttt'
+          // })
+          // console.info('nodeId:', nodeId)
+          await client.DOM.setAttributeValue({
+            nodeId,
+            name: 'style',
+            value: `border:1px solid #${(~~(Math.random() * (1 << 24))).toString(16)}`
+          })
+          // let tmp = await client.DOM.requestChildNodes({ nodeId })
+          // console.info(tmp)
         })
       }
     }
@@ -280,6 +230,11 @@ export default {
     }
   },
   created() {
+    this.chromeClient = null // should not be reactive, otherwise will occur error
+    this.grubClient()
+  },
+  beforeDestroy() {
+    this.releaseClient()
   }
 }
 
