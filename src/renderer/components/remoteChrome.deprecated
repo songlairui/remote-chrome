@@ -22,6 +22,44 @@
         this.msgPool.card1 = data ? data.toString() : ''
       })
     },
+    /**
+     * 回调函数执行JS
+     */
+    execJSraw() {
+      let options = Object.assign({}, this.address, { target: this.selectedTabIds[0] })
+      // let options = Object.assign({}, this.address)
+      CDP(options).then(client => {
+        // console.info(clients)
+        this.selectedClient = client
+
+      }).then(() => {
+        this.selectedClient.Runtime.evaluate({
+          expression: `document.body.appendChild(document.createTextNode('asdasd'))`
+        })
+      }).then(() => {
+        this.selectedClient.close()
+      }).catch(e => {
+        console.error('E', e)
+      })
+    },
+    grubClientPromise() {
+      let options = Object.assign({}, this.address)
+      CDP.listTabs(options, (err, targets) => {
+        let target = ([].concat(selectedTabs(targets))).map(_ => _.id)[0]
+        if (!target) return
+        CDP(Object.assign({}, options, { target })).then(client => {
+
+          this.selectedClient = client
+          client.on('event', (...msg) => {
+            console.info(msg)
+          })
+          client.on('disconnect', function () {
+            console.info('断开连接了')
+            // this.selectedClient = null
+          })
+        })
+      })
+    },
     CRIList() {
       let process = spawn('/usr/local/bin/chrome-remote-interface', [
         'list',
@@ -75,3 +113,20 @@
     getViaHIframw() {
       // 通过iframe获取跨域信息？
     },
+
+
+/**
+ * 拼接 Typed Array，用于spawn返回标准输出时处理
+ */
+function concatTypedArray(array) {
+  let concatTwo = (u1, u2) => {
+    if (!u1) u1 = new Uint8Array(0)
+    if (!u2) u2 = new Uint8Array(0)
+    let newArr = new Uint8Array(u1.length + u2.length)
+    newArr.set(u1)
+    newArr.set(u2, u1.length)
+    return newArr
+  }
+  let tmpArr = array.reduce((result, current) => concatTwo(result, current))
+  return tmpArr
+}
