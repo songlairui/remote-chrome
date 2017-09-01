@@ -20,6 +20,7 @@
 export default {
   name: 'dashboard-commands',
   created() {
+    // this.$router.go({name:''})
     // console.info(this.$router)
   }
 }

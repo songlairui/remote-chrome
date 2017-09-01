@@ -127,7 +127,7 @@ export default {
         })
       }).catch(error => console.error(error))
       target_id = target_id || "34567890"
-//      this.releaseClient()
+      //      this.releaseClient()
       try {
         client = await CDP(Object.assign({}, options, { target: target_id }))
       } catch (error) {
@@ -165,13 +165,11 @@ export default {
         })
       })
     },
-    
     /**
      * 建立连接
      */
     async grubClient() {
       let client = await this.getTarget()
-
     },
     /**
      * 断开连接
@@ -195,19 +193,20 @@ export default {
   ${fn}
 }`
       }
+      let result = undefined
       let client = this.chromeClient
       if (client) {
         const { Runtime, Page } = client
         let args = [...arguments].slice(1).map(_ => JSON.stringify(_))
         let evaluationStr = `(()=>{
           let fn = ${String(fn)}
-          fn.apply(null,[${args}])
+          return fn.apply(null,[${args}])
         })()`
         // trigger an alert message
         try {
           await Page.enable();
           console.info('expression:', evaluationStr)
-          await Runtime.evaluate({
+          result = await Runtime.evaluate({
             expression: evaluationStr
           })
         } catch (err) {
@@ -216,6 +215,7 @@ export default {
       } else {
         this.$Message.info('no Connections')
       }
+      return result
     },
     /**
      * 关闭alert弹窗，如果有
@@ -272,13 +272,23 @@ export default {
       let execJS = this.execJS
       if (client) {
         let root = await client.DOM.getDocument()
+        let dataPool = await axios.get('https://easy-mock.com/mock/59a8c2c54006183e48ef7594/mock/register')
+        console.info(dataPool)
         let result = await client.DOM.querySelectorAll({ nodeId: root.root.nodeId, selector: 'input' })
         result.nodeIds.forEach(async nodeId => {
           let attributes = parseAttrs((await client.DOM.getAttributes({ nodeId })).attributes)
           // console.info()
-          console.info(attributes.type)
-          if ('text' === attributes.type) {
-            await execJS(`document.querySelector('#${attributes.id}').value='test'`)
+          console.info('type:', attributes.type)
+          if (typeof attributes.type === 'undefined' || 'text' === attributes.type || 'password' === attributes.type) {
+            if (attributes.id) {
+              await execJS(`
+              let target = document.querySelector('#${attributes.id}')
+              if(!(''+target.value)){
+                target.value=\`${dataPool.data.data[attributes.id]}\`;
+              }
+              `)
+              // console.info(`dom value #${attributes.id}' : `, (await execJS(`return `)).result.value)
+            }
           }
           // return []
         })
@@ -300,6 +310,18 @@ export default {
   beforeDestroy() {
     this.releaseClient()
   }
+}
+
+async function mockInput(id, data) {
+  return data[id] ? data[id] : ''
+  // switch (id) {
+  //   case "":
+
+  //     break;
+
+  //   default:
+  //     break;
+  // }
 }
 
 /**
