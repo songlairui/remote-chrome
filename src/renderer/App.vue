@@ -31,6 +31,7 @@ html,
 body,
 #app {
   /* border-radius: 10px; */
+  background: rgba(0, 0, 0, 0) !important;
 }
 
 .layout {
@@ -48,7 +49,8 @@ body,
 .layout-logo {
   min-width: 100px;
   min-height: 30px;
-  background: #5b6270;
+  background: rgba(34, 40, 110, .7);
+  /* filter:blur(2px); */
   color: snow;
   border-radius: 3px;
   float: left;
@@ -62,7 +64,7 @@ body,
 
 .layout-header {
   height: 60px;
-  background: #fff;
+  background: rgba(0, 0, 0, .7);
   box-shadow: 0 1px 1px rgba(0, 0, 0, .1);
 }
 
@@ -74,7 +76,7 @@ body,
 
 .nav {
   -webkit-app-region: drag;
-  background: #464c5b;
+  background: rgba(0, 0, 0, .7);
   display: flex;
 }
 

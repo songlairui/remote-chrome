@@ -24,11 +24,12 @@ function createWindow() {
     height: 563,
     useContentSize: true,
     width: 1000,
-    // titleBarStyle: 'customButtonsOnHover',
-    // frame: false,
+    titleBarStyle: 'customButtonsOnHover',
+    frame: false,
     // transparent: true,
     webPreferences: {
-      'web-security': false
+      'web-security': false,
+      'direct-write': true
     }
   })
 

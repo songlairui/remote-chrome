@@ -1,73 +1,71 @@
 <template>
   <div class="remoteChrome">
+    <h1>[ {{kaptcha}} ] urlPath : {{ urlPath }}</h1>
+    <Row>
+      <Col span="11">
+      <Input v-model="address.host">
+      <span slot="prepend">host:</span>
+      </Input>
+      </Col>
+      <Col span="11" offset='1'>
+      <Input v-model="address.port">
+      <span slot="prepend">port:</span>
+      </Input>
+      </Col>
+    </Row>
+    <br>
+    <Row type="flex" justify="start">
+      <Col>
+      <Alert show-icon :type="connected ? 'success' : 'error'">{{ connected? "已连接" : "未连接" }}</Alert>
+      </Col>
+      <Col>
+      <Button type="primary" @click='grubClient'>建立连接</Button>
+      <Button type="primary" @click="releaseClient">断开连接</Button>
+      </Col>
+    </Row>
+    <Row>
+      <Button type="primary" @click="CDPList">[CDP] 显示标签列表</Button>
+      <Button type="primary" @click="CDPActivateTarget">[CDP] 激活目标标签</Button>
+    </Row>
 
-    <Card shadow>
-      <p slot="title">urlPath : {{ urlPath }}</p>
-      <Row>
-        <Col span="11">
-        <Input v-model="address.host">
-        <span slot="prepend">host:</span>
-        </Input>
-        </Col>
-        <Col span="11" offset='1'>
-        <Input v-model="address.port">
-        <span slot="prepend">port:</span>
-        </Input>
-        </Col>
-      </Row>
-      <br>
-      <Row type="flex" justify="start">
-        <Col>
-        <Alert show-icon :type="connected ? 'success' : 'error'">{{ connected? "已连接" : "未连接" }}</Alert>
-        </Col>
-        <Col>
-        <Button type="primary" @click='grubClient'>建立连接</Button>
-        <Button type="primary" @click="releaseClient">断开连接</Button>
-        </Col>
-      </Row>
-      <Row>
-        <Button type="primary" @click="CDPList">[CDP] 显示标签列表</Button>
-        <Button type="primary" @click="CDPActivateTarget">[CDP] 激活目标标签</Button>
-      </Row>
+    <Row>
+      <h4>执行JS</h4>
+      <Input v-model="targetFn" type="textarea" :autosize="true" placeholder="请输入..."></Input>
+    </Row>
+    <Row>
+      <Button type="primary" @click="execJS()">执行JS</Button>
+      <Button type="primary" @click="alertAccepted()">alert确定</Button>
+    </Row>
+    <Row>
+      <Button type="primary" @click="selectDOM()">选择DOM</Button>
+      <Button type="primary" @click="changeColor()">改变颜色</Button>
+      <Button type="primary" @click="execJS(`login()`)">点击登录</Button>
+      <Button type="primary" @click="execJS(`document.querySelectorAll('.top .f_right')[0].click()`)">点击注册按钮</Button>
+    </Row>
+    <Row>
+      <Button type="primary" @click="selectInputs()">选择INPUT</Button>
+    </Row>
+    <br>
+    <Row>
+      <Collapse v-model="value1" :bordered="false">
+        <Panel name="1">
+          RESULT
+          <pre slot="content">{{msgPool['card1']}}</pre>
+        </Panel>
+      </Collapse>
+    </Row>
+    <Row>
+      <Card v-for="(chrometab,idx) in inspectTabs" :key='chrometab.id' class='chrometab' :class="{red:selectedTabIds.indexOf(chrometab.id) !== -1}" shadow>
+        <p slot="title"><img v-if="!!chrometab.faviconUrl" :src="chrometab.faviconUrl | fixURL " alt="">{{ chrometab.title }}</p>
+        <p class="Oneline">
+          <span>{{ chrometab.devtoolsFrontendUrl}}</span>
+        </p>
+        <p class="Oneline">
+          <span>{{ chrometab.url | fixURL}}</span>
+        </p>
+      </Card>
+    </Row>
 
-      <Row>
-        <h4>执行JS</h4>
-        <Input v-model="targetFn" type="textarea" :autosize="true" placeholder="请输入..."></Input>
-      </Row>
-      <Row>
-        <Button type="primary" @click="execJS()">执行JS</Button>
-        <Button type="primary" @click="alertAccepted()">alert确定</Button>
-      </Row>
-      <Row>
-        <Button type="primary" @click="selectDOM()">选择DOM</Button>
-        <Button type="primary" @click="changeColor()">改变颜色</Button>
-        <Button type="primary" @click="execJS(`login()`)">点击登录</Button>
-        <Button type="primary" @click="execJS(`document.querySelectorAll('.top .f_right')[0].click()`)">点击注册按钮</Button>
-      </Row>
-      <Row>
-        <Button type="primary" @click="selectInputs()">选择INPUT</Button>
-      </Row>
-      <br>
-      <Row>
-        <Collapse v-model="value1" :bordered="false">
-          <Panel name="1">
-            RESULT
-            <pre slot="content">{{msgPool['card1']}}</pre>
-          </Panel>
-        </Collapse>
-      </Row>
-      <Row>
-        <Card v-for="(chrometab,idx) in inspectTabs" :key='chrometab.id' class='chrometab' :class="{red:selectedTabIds.indexOf(chrometab.id) !== -1}" shadow>
-          <p slot="title"><img v-if="!!chrometab.faviconUrl" :src="chrometab.faviconUrl | fixURL " alt="">{{ chrometab.title }}</p>
-          <p class="Oneline">
-            <span>{{ chrometab.devtoolsFrontendUrl}}</span>
-          </p>
-          <p class="Oneline">
-            <span>{{ chrometab.url | fixURL}}</span>
-          </p>
-        </Card>
-      </Row>
-    </Card>
   </div>
 </template>
 
@@ -77,6 +75,7 @@ import CDP from 'chrome-remote-interface'
 import axios from 'axios'
 const url = require('url')
 
+const dgram = require('dgram')
 const { spawn } = require('child_process')
 
 
@@ -91,6 +90,7 @@ export default {
       selectedTabIds: [],
       track: null,
       connected: null,
+      kaptcha: '',
       address: {
         host: 'lhyh.songlairui.cn',
         port: '9221'
@@ -132,13 +132,29 @@ export default {
         client = await CDP(Object.assign({}, options, { target: target_id }))
       } catch (error) {
         console.info('Error', error)
+        this.$Message.error('连接失败，稍后重试')
+        this.chromeClient = null
+        this.connected = false
+        // setTimeout(() => {
+        //   if (this.chromeClient || this.connected) return
+        //   this.$Message.info('尝试重新连接')
+        //   this.getTarget()
+        // }, 3456)
         return
       }
 
       client.on('disconnect', () => {
         console.info('断开连接了')
+        this.$Message.error('连接失败，稍后重试')
         this.chromeClient = null
         this.connected = false
+        setTimeout(() => {
+
+          if (this.chromeClient || this.connected) return
+          // 尝试重新连接
+          this.$Message.info('尝试重新连接')
+          this.getTarget()
+        }, 3579)
       })
       // handle popup opening
       client.Page.javascriptDialogOpening(async ({ message, type }) => {
@@ -306,8 +322,11 @@ export default {
   created() {
     this.chromeClient = null // should not be reactive, otherwise will occur error
     this.grubClient()
+
+    this.serv = createServer(this)
   },
   beforeDestroy() {
+    this.serv.close()
     this.releaseClient()
   }
 }
@@ -328,13 +347,15 @@ async function mockInput(id, data) {
  * 正则筛选当前需要激活的页面
  */
 function selectedTabs(targets) {
-  let validHostName = ['127.0.0.1', 'localhost', 'lhyh.songlairui.cn', '10.0.2.15']
-  let validSubDir = ['ol', 'OL', 'LHOL']
+  let validHostName = ['127.0.0.1', 'localhost', 'lhyh.songlairui.cn', '10.0.2.15', '36.11.120.13', '118.193.228.119','10.0.3.99']
+  let validSubDir = ['ol','lhol']
+  // console.info({targets})
   return targets.filter(target => {
     let urldata = url.parse(target.url)
     let hostname = urldata.hostname
     let subDir = urldata.pathname.match(/^\/?(.*?)\//)[1] // 非贪婪匹配
-    return validHostName.indexOf(hostname) !== -1 && validSubDir.indexOf(subDir) !== -1
+    // console.info({hostname,subDir})
+    return validHostName.indexOf(hostname) !== -1 && validSubDir.indexOf(subDir.toLowerCase()) !== -1
   })
 }
 
@@ -352,6 +373,31 @@ function parseAttrs(attributes) {
     result[attributes[i]] = attributes[i + 1]
   }
   return result
+}
+function createServer(vm) {
+  const server = dgram.createSocket('udp4')
+  server.on('error', (err) => {
+    console.log(`server error:\n${err.stack}`);
+    server.close();
+  });
+  server.on('message', async (res, rinfo) => {
+    let msg = res.toString()
+    if (msg.indexOf('Kaptcha:') === 0) {
+      let kaptch = msg.replace('Kaptcha:', '')
+      console.info('验证码\n', kaptch)
+      vm.kaptcha = kaptch
+      vm.execJS(`let target = document.querySelector('#txtCode')
+  target.value='${kaptch}'`)
+    } else {
+      console.log(`server got: ${msg} from ${rinfo.address}:${rinfo.port}`);
+    }
+  });
+  server.on('listening', () => {
+    const address = server.address();
+    console.log(`server listening ${address.address}:${address.port}`);
+  });
+  server.bind(41234);
+  return server
 }
 </script>
 
